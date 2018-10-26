@@ -14,7 +14,9 @@ $( document ).ready(function() {
 
   var tabRapport = [];
 
-  var tabStats = {};
+  var tabStatsDrivers = {};
+
+
 
   const dataToken = {
           gmtOffset : {value: 0},
@@ -26,11 +28,32 @@ $( document ).ready(function() {
 
   var shouldDisplay = 0;
 
-  console.log("Page ready !");
+  $("#getCsv").click(function() {
+    createCsv(tabStatsDrivers);
+  });
 
   $("#getReport").click(function() {
-    nbRapport = 0;
-    getToken(getVehicles);
+
+
+    if ((localStorage.getItem("tabStatsDrivers") != null
+        && localStorage.getItem("currentWeekMonday") != null
+        && localStorage.getItem("dicoDrivers") != null)
+        && lastMonday == localStorage.getItem("currentWeekMonday")
+        && localStorage.getItem('username') == localStorage.getItem('saveStatsUsername')) {
+
+          dicoDrivers = JSON.parse(localStorage.getItem("dicoDrivers"));
+          tabStatsDrivers = JSON.parse(localStorage.getItem("tabStatsDrivers"));
+          console.log(dicoDrivers);
+          console.log(tabStatsDrivers);
+          shouldDisplay = 2;
+          displayDriver(shouldDisplay);
+
+    } else {
+
+      nbRapport = 0;
+      getToken(getVehicles);
+    }
+
   });
 
   function getToken(onSuccess) {
@@ -49,6 +72,7 @@ $( document ).ready(function() {
   }
 
   function onSuccessVehicle(data) {
+    console.log(data.result);
 
     tabVehicles = data.result.vehicleInfos;
 
@@ -59,8 +83,9 @@ $( document ).ready(function() {
 
   function getRapportChunk(minRange, maxRange, tab) {
 
+
     getToken(function(data) {
-      console.log("Range:", "[" + minRange +", "+maxRange+"]");
+      console.log("Range:", "[" + minRange +", "+maxRange+"]"," token:", data.result.id);
       for(var i = minRange; i < maxRange; i++) {
 
         getSingleReport( data.result.id, tab[i].vehicleId.id);
@@ -69,7 +94,7 @@ $( document ).ready(function() {
 
   }
 
-  function getSingleReport(tmpToken, tmpVehicleId) {
+  function getSingleReport(tmpToken, tmpVehicleId, rangCallBack) {
 
     if(isFirstChunk) {
       var objData = {
@@ -122,30 +147,32 @@ $( document ).ready(function() {
     } else if(nbRapport%requestByToken == 0) {
 
       getRapportChunk( nbRapport,
-        nbRapport+requestByToken==tabVehicles.length ?tabVehicles.length :  nbRapport+requestByToken,
+        nbRapport+requestByToken > tabVehicles.length ?tabVehicles.length :  nbRapport+requestByToken,
         tabVehicles);
+
     }
   }
 
   function makeStats() {
     getToken(getDrivers);
-    console.log("Calculatin stats...");
+
     console.log(tabRapport);
 
     for(var i in tabRapport) {
 
-      if(typeof tabStats[tabRapport[i].driverId.id] === "undefined") {
-        tabStats[tabRapport[i].driverId.id] = newTemplateData();
+      if(typeof tabStatsDrivers[tabRapport[i].driverId.id] === "undefined") {
+        tabStatsDrivers[tabRapport[i].driverId.id] = newTemplateData();
       }
 
-      tabStats[tabRapport[i].driverId.id].totalSeconds += Number(tabRapport[i].unitOnSeconds.value);
-      tabStats[tabRapport[i].driverId.id].coastingMeters += Number(tabRapport[i].coastingMeters.value);
-      tabStats[tabRapport[i].driverId.id].lovEngineOutOfGreenAreaSeconds += Number(tabRapport[i].lovEngineOutOfGreenAreaSeconds.value);
-      tabStats[tabRapport[i].driverId.id].economySeconds += Number(tabRapport[i].economySeconds.value);
-      tabStats[tabRapport[i].driverId.id].idleSecond += Number(tabRapport[i].idleSeconds.value);
-      tabStats[tabRapport[i].driverId.id].stopCount += Number(tabRapport[i].stopCount.value);
-      tabStats[tabRapport[i].driverId.id].breakCount += Number(tabRapport[i].brakeCount.value);
-      tabStats[tabRapport[i].driverId.id].totalDistance += Number(tabRapport[i].drivingMeters.value);
+      for(var j in tabRapport[i]) {
+        if(j != 'driverId' && j != 'startTime' && j != 'endTime' && tabStatsDrivers[tabRapport[i].driverId.id].hasOwnProperty(j)) {
+           tabStatsDrivers[tabRapport[i].driverId.id][j].value += Number(tabRapport[i][j].value);
+        }
+
+        if(j != 'driverId' && j != 'startTime' && j != 'endTime' && !tabStatsDrivers[tabRapport[i].driverId.id].hasOwnProperty(j)) {
+           console.log("has not", j);
+        }
+      }
 
     }
     shouldDisplay++;
@@ -154,7 +181,6 @@ $( document ).ready(function() {
   }
 
   function getDrivers(data) {
-    console.log("Getting drivers...");
     var data = {
       id: data.result.id
     };
@@ -164,7 +190,6 @@ $( document ).ready(function() {
   }
 
   function getDicoDrivers(data) {
-    console.log("Creating driver table...", data);
 
     var driverTab = data.result.driverInfos;
 
@@ -175,15 +200,30 @@ $( document ).ready(function() {
       };
     }
 
+
     shouldDisplay++;
     displayDriver(shouldDisplay);
 
   }
 
   function displayDriver(tmp) {
-    console.log("Display drivers !");
 
     if(shouldDisplay == 2) {
+
+      if (localStorage.getItem("tabStatsDrivers") === null) {
+        localStorage.setItem('tabStatsDrivers', JSON.stringify(tabStatsDrivers));
+      }
+
+      if (localStorage.getItem("currentWeekMonday") === null) {
+        localStorage.setItem('currentWeekMonday', lastMonday);
+      }
+
+      if (localStorage.getItem("dicoDrivers") === null) {
+        localStorage.setItem('dicoDrivers', JSON.stringify(dicoDrivers));
+      }
+
+      localStorage.setItem('saveStatsUsername', localStorage.getItem('username'));
+
       var tableStr = '<thead>';
             tableStr += '<tr>';
               tableStr += '<th>Nom</th>';
@@ -193,13 +233,13 @@ $( document ).ready(function() {
           tableStr += '</thead>';
 
     for (var i in dicoDrivers) {
-      if(!(typeof tabStats[dicoDrivers[i].driverId] === "undefined")) {
+      //if(!(typeof tabStatsDrivers[dicoDrivers[i].driverId] === "undefined")) {
         tableStr += '<tr>';
           tableStr += '<td>'+ dicoDrivers[i].displayName +'</td>';
           tableStr += '<td>'+ dicoDrivers[i].driverId +'</td>';
           tableStr += '<td><button type="button" class="btn btn-success rapport_button" id='+ dicoDrivers[i].driverId +'>Rapport</button></td>';
         tableStr += '</tr>';
-      }
+      //}
     }
 
 
@@ -208,13 +248,13 @@ $( document ).ready(function() {
     $(".dataTables_wrapper").html(tableStr);
     $('.dataTables_wrapper').DataTable();
     }
+
   }
 
 
   $(".data_container").on( "click", ".rapport_button", function() {
-      console.log("Get rapport !", $(this).attr("id"));
 
-      if(typeof tabStats[$(this).attr("id")] === "undefined") {
+      if(typeof tabStatsDrivers[$(this).attr("id")] === "undefined") {
         alert("Pas de stats");
       } else {
         displayModal($(this).attr("id"));
@@ -223,40 +263,38 @@ $( document ).ready(function() {
   });
 
   function displayModal(tmpDriverId) {
-    console.log("Display modal", tmpDriverId);
-
     var strTab = '<table style="width:100%;">';
           strTab += '<tr>';
-            strTab += '<th>Temps (s)</th>';
-            strTab += '<th>'+ secondsToHms(tabStats[tmpDriverId].totalSeconds) +'</th>';
+            strTab += '<th>Temps total</th>';
+            strTab += '<th>'+ secondsToHms(tabStatsDrivers[tmpDriverId].unitOnSeconds.value) +'</th>';
           strTab += '</tr>';
           strTab += '<tr>';
             strTab += '<th>Distance (km)</th>';
-            strTab += '<th>'+ tabStats[tmpDriverId].totalDistance/1000 +'</th>';
+            strTab += '<th>'+ tabStatsDrivers[tmpDriverId].drivingMeters.value/1000 +'</th>';
           strTab += '</tr>';
           strTab += '<tr>';
             strTab += '<th>Nombre de stop / 100km</th>';
-            strTab += '<th>'+ Math.ceil(100/(tabStats[tmpDriverId].totalDistance/1000)*tabStats[tmpDriverId].stopCount) +'</th>';
+            strTab += '<th>'+ Math.ceil(100/(tabStatsDrivers[tmpDriverId].drivingMeters.value/1000)*tabStatsDrivers[tmpDriverId].stopCount.value) +'</th>';
           strTab += '</tr>';
           strTab += '<tr>';
             strTab += '<th>Coup de frein / 100km</th>';
-            strTab += '<th>'+ Math.ceil(100/(tabStats[tmpDriverId].totalDistance/1000)*tabStats[tmpDriverId].breakCount) +'</th>';
+            strTab += '<th>'+ Math.ceil(100/(tabStatsDrivers[tmpDriverId].drivingMeters.value/1000)*tabStatsDrivers[tmpDriverId].brakeCount.value) +'</th>';
           strTab += '</tr>';
           strTab += '<tr>';
-            strTab += '<th>Ralenti %</th>';
-            strTab += '<th>'+ ((tabStats[tmpDriverId].idleSecond/tabStats[tmpDriverId].totalSeconds)*100).toFixed(2) +'</th>';
+            strTab += '<th>Ralenti - Durée</th>';
+            strTab += '<th>'+ ((tabStatsDrivers[tmpDriverId].idleSeconds.value/tabStatsDrivers[tmpDriverId].unitOnSeconds.value)*100).toFixed(2) +'%</th>';
           strTab += '</tr>';
           strTab += '<tr>';
-            strTab += '<th>Mode economique %</th>';
-            strTab += '<th>'+ ((tabStats[tmpDriverId].economySeconds/tabStats[tmpDriverId].totalSeconds)*100).toFixed(2) +'</th>';
+            strTab += '<th>Mode economique - Durée</th>';
+            strTab += '<th>'+ ((tabStatsDrivers[tmpDriverId].economySeconds.value/tabStatsDrivers[tmpDriverId].unitOnSeconds.value)*100).toFixed(2) +'%</th>';
           strTab += '</tr>';
           strTab += '<tr>';
-            strTab += '<th>Au-delà mode eco %</th>';
-            strTab += '<th>'+ ((tabStats[tmpDriverId].lovEngineOutOfGreenAreaSeconds/tabStats[tmpDriverId].totalSeconds)*100).toFixed(2) +'</th>';
+            strTab += '<th>Au-delà mode eco - Durée</th>';
+            strTab += '<th>'+ ((tabStatsDrivers[tmpDriverId].lovEngineOutOfGreenAreaSeconds.value/tabStatsDrivers[tmpDriverId].unitOnSeconds.value)*100).toFixed(2) +'%</th>';
           strTab += '</tr>';
           strTab += '<tr>';
-            strTab += '<th>Regulateur de vitesse %</th>';
-            strTab += '<th>'+ ((tabStats[tmpDriverId].coastingMeters/tabStats[tmpDriverId].totalDistance)*100).toFixed(2) +'</th>';
+            strTab += '<th>Roue libre - Durée</th>';
+            strTab += '<th>'+ ((tabStatsDrivers[tmpDriverId].coastingMeters.value/tabStatsDrivers[tmpDriverId].drivingMeters.value)*100).toFixed(2) +'%</th>';
           strTab += '</tr>';
 
         strTab += '</table>';
@@ -265,6 +303,8 @@ $( document ).ready(function() {
     $("#modal_content").html(strTab);
 
     $('#exampleModalCenter').modal('toggle');
+
+
   }
 
 
